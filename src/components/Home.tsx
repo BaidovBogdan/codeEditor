@@ -44,6 +44,8 @@ const runPython = (code: string): Promise<string> => {
 
 createServer({
   routes() {
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    //@ts-ignore
     this.post('/api/execute', async (schema, request) => {
       const { language, code } = JSON.parse(request.requestBody);
 
