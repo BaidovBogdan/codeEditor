@@ -1,15 +1,50 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from 'react';
 import MonacoEditor from '@monaco-editor/react';
 import { Button, Select, Alert } from 'antd';
 import { createServer } from 'miragejs';
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+import Sk from 'skulpt';
 
 const { Option } = Select;
+const runPython = (code: string): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    let output = '';
+
+    Sk.configure({
+      output: (text: string) => {
+        output += text;
+      },
+      read: (filename: string) => {
+        if (
+          Sk.builtinFiles === undefined ||
+          Sk.builtinFiles['files'][filename] === undefined
+        ) {
+          throw new Error(`File not found: '${filename}'`);
+        }
+        return Sk.builtinFiles['files'][filename];
+      },
+    });
+
+    Sk.misceval
+      .asyncToPromise(() => Sk.importMainWithBody('<stdin>', false, code))
+      .then(() => {
+        if (output.trim()) {
+          resolve(output);
+        } else {
+          resolve('Execution completed without output.');
+        }
+      })
+      .catch((err: any) => {
+        reject(err.toString());
+      });
+  });
+};
 
 createServer({
   routes() {
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    //@ts-ignore
-    this.post('/api/execute', (schema, request) => {
+    this.post('/api/execute', async (schema, request) => {
       const { language, code } = JSON.parse(request.requestBody);
 
       try {
@@ -17,14 +52,8 @@ createServer({
           const result = eval(code);
           return { status: 'success', output: String(result) };
         } else if (language === 'python') {
-          if (code.includes('print')) {
-            return {
-              status: 'success',
-              output: code.replace('print(', '').replace(')', ''),
-            };
-          } else {
-            throw new Error('NameError: name "print" is not defined');
-          }
+          const output = await runPython(code);
+          return { status: 'success', output };
         } else {
           throw new Error('Unsupported language');
         }
@@ -85,8 +114,12 @@ export default function CodeEditorApp() {
       <Button type="primary" onClick={handleRunCode}>
         Run
       </Button>
-      {result && <Alert message="Output" description={result} type="success" />}
-      {error && <Alert message="Error" description={error} type="error" />}
+      <div>
+        {result && (
+          <Alert message="Output" description={result} type="success" />
+        )}
+        {error && <Alert message="Error" description={error} type="error" />}
+      </div>
     </div>
   );
 }
